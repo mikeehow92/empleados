@@ -1,6 +1,7 @@
     {
       "hosting": {
         "public": "dist",
+        "site": "mitienda-admin", 
         "ignore": [
           "firebase.json",
           "**/.*",
@@ -8,13 +9,13 @@
         ],
         "rewrites": [
           {
-            "source": "/admin/**",
+            "source": "**", 
             "destination": "/index.html"
           }
         ],
         "headers": [
           {
-            "source": "/admin/assets/**",
+            "source": "**/*.@(js|css)",
             "headers": [
               {
                 "key": "Cache-Control",
