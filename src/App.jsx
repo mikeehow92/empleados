@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, limit, getDoc } from 'firebase/firestore'; // Added getDoc
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // Importa solo la configuración de Firebase
@@ -75,15 +75,14 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { auth } = useContext(AppContext);
-  const { showAlert } = useModal();
+  const { auth, showAlert } = useContext(AppContext); // showAlert now comes from AppContext
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      showAlert('¡Inicio de sesión exitoso!');
+      // The success alert and redirection are now handled in App.jsx's onAuthStateChanged
     } catch (error) {
       console.error('Error al iniciar sesión:', error);
       showAlert(`Error al iniciar sesión: ${error.message}`);
@@ -168,6 +167,9 @@ const Dashboard = () => {
             totalProducts: productsData.length,
             lowStockProducts: lowStock,
           }));
+        }, (err) => {
+          console.error("Error fetching products for dashboard:", err);
+          setError("Error al cargar datos de productos.");
         });
 
         // Órdenes
@@ -180,6 +182,9 @@ const Dashboard = () => {
             totalOrders: ordersData.length,
             pendingOrders: pending,
           }));
+        }, (err) => {
+          console.error("Error fetching orders for dashboard:", err);
+          setError("Error al cargar datos de órdenes.");
         });
 
         setLoading(false);
@@ -189,7 +194,7 @@ const Dashboard = () => {
           ordersUnsubscribe();
         };
       } catch (err) {
-        console.error("Error fetching dashboard summary:", err);
+        console.error("Error general al obtener el resumen del dashboard:", err);
         setError("Error al cargar el resumen del dashboard.");
         setLoading(false);
       }
@@ -693,9 +698,10 @@ export default function App() {
   const [auth, setAuth] = useState(null);
   const [storage, setStorage] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false); // NEW: State to track admin status
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard', 'products', 'orders', 'login'
-  const { modalState, showAlert } = useModal();
+  const { modalState, showAlert } = useModal(); // Get showAlert from App's useModal hook
 
   // Initialize Firebase
   useEffect(() => {
@@ -731,14 +737,36 @@ export default function App() {
     }
   }, [showAlert]);
 
-  // Handle authentication state changes
+  // Handle authentication state changes and role verification
   useEffect(() => {
-    if (!auth) return;
+    if (!auth || !db) return; // Ensure auth and db are initialized
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user); // Set current user from auth state
+
       if (user) {
-        setCurrentUser(user);
-        // Si se proporciona un token inicial (del Canvas), inicia sesión con él
+        // If a user is logged in, verify their role from Firestore
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          const userDoc = await getDoc(userDocRef);
+
+          if (userDoc.exists() && userDoc.data().role === 'admin') {
+            setIsAdmin(true);
+            showAlert(`¡Inicio de sesión exitoso como Administrador!`);
+          } else {
+            setIsAdmin(false);
+            // If user is not an admin, automatically sign them out
+            showAlert('Acceso denegado: No tienes permisos de administrador.', 'error');
+            await signOut(auth); // Log out non-admin users
+          }
+        } catch (error) {
+          console.error("Error al obtener el rol del usuario:", error);
+          setIsAdmin(false); // Deny access if there's an error fetching role
+          showAlert('Error al verificar permisos. Por favor, intenta iniciar sesión de nuevo.', 'error');
+          await signOut(auth); // Log out on error
+        }
+
+        // If a custom token is provided (from Canvas environment), sign in with it
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           try {
             await signInWithCustomToken(auth, __initial_auth_token);
@@ -748,25 +776,23 @@ export default function App() {
             showAlert(`Error al iniciar sesión con token personalizado: ${error.message}`);
           }
         }
-        // Si el usuario es anónimo y no hay un token personalizado, no se hace nada más.
-        // Si el usuario es un usuario con email/password, simplemente se establece.
       } else {
-        setCurrentUser(null);
-        // Si no hay usuario y no hay un token inicial, la página de Login se mostrará.
-        // No se intenta signInAnonymously aquí.
+        // No user logged in, reset admin status
+        setIsAdmin(false);
+        setCurrentPage('dashboard'); // Default to dashboard (which will show login)
       }
       setLoadingAuth(false);
     });
 
     return () => unsubscribe();
-  }, [auth, showAlert]);
+  }, [auth, db, showAlert]); // Add db to dependencies as it's used inside
 
   const handleLogout = async () => {
     if (auth) {
       try {
         await signOut(auth);
         showAlert('¡Sesión cerrada con éxito!');
-        setCurrentPage('login'); // Redirigir a la página de login
+        setCurrentPage('dashboard'); // Redirigir a la página de login (que será el dashboard sin acceso)
       } catch (error) {
         console.error('Error al cerrar sesión:', error);
         showAlert(`Error al cerrar sesión: ${error.message}`);
@@ -782,7 +808,7 @@ export default function App() {
     );
   }
 
-  // Si Firebase no está inicializado o la autenticación falló, muestra un error o la página de inicio de sesión
+  // If Firebase is not initialized or authentication failed, show an error or the login page
   if (!firebaseApp || !db || !auth || !storage) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-red-100 text-red-800 p-4">
@@ -794,19 +820,20 @@ export default function App() {
     );
   }
 
-  // Si no ha iniciado sesión, muestra la página de inicio de sesión
-  if (!currentUser) {
+  // CRITICAL: Conditional rendering for Admin Panel Access
+  // Only render the admin panel if a user is logged in AND they are an admin
+  if (!currentUser || !isAdmin) {
     return (
-      <AppContext.Provider value={{ db, auth, storage, currentUser }}>
+      <AppContext.Provider value={{ db, auth, storage, currentUser, showAlert }}> {/* Pass showAlert */}
         <Login />
         <CustomModal {...modalState} />
       </AppContext.Provider>
     );
   }
 
-  // Diseño principal del Dashboard
+  // Main Dashboard Layout (only rendered for authenticated admins)
   return (
-    <AppContext.Provider value={{ db, auth, storage, currentUser }}>
+    <AppContext.Provider value={{ db, auth, storage, currentUser, showAlert }}> {/* Pass showAlert */}
       <div className="flex flex-col min-h-screen bg-gray-100 font-inter">
         {/* Navbar */}
         <nav className="bg-blue-700 p-4 text-white shadow-lg">
