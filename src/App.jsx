@@ -82,7 +82,7 @@ const Login = () => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // The success alert and redirection are now handled in App.jsx's onAuthStateChanged
+      // La alerta de éxito y la redirección se manejarán en App.jsx's onAuthStateChanged
     } catch (error) {
       console.error('Error al iniciar sesión:', error);
       showAlert(`Error al iniciar sesión: ${error.message}`);
@@ -743,49 +743,61 @@ export default function App() {
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user); // Set current user from auth state
+      console.log("App.jsx: onAuthStateChanged - Usuario actual:", user ? user.email : "Ninguno");
 
       if (user) {
         // If a user is logged in, verify their role from Firestore
         try {
+          console.log(`App.jsx: Verificando rol para UID: ${user.uid}`);
           const userDocRef = doc(db, 'users', user.uid);
           const userDoc = await getDoc(userDocRef);
 
           if (userDoc.exists() && userDoc.data().role === 'admin') {
+            console.log("App.jsx: Usuario es administrador.");
             setIsAdmin(true);
             showAlert(`¡Inicio de sesión exitoso como Administrador!`);
           } else {
-            setIsAdmin(false);
-            // If user is not an admin, automatically sign them out
+            // Usuario NO es administrador
+            console.log("App.jsx: Usuario NO es administrador o rol no definido. Documento existe:", userDoc.exists(), "Rol:", userDoc.data()?.role);
+            setIsAdmin(false); // Establece isAdmin a false
+            setCurrentUser(null); // Fuerza la actualización de la UI a null
             showAlert('Acceso denegado: No tienes permisos de administrador.', 'error');
-            await signOut(auth); // Log out non-admin users
+            await signOut(auth); // Cierra la sesión del usuario no-admin
+            console.log("App.jsx: Sesión de usuario no-admin cerrada.");
           }
         } catch (error) {
-          console.error("Error al obtener el rol del usuario:", error);
-          setIsAdmin(false); // Deny access if there's an error fetching role
+          console.error("App.jsx: Error al obtener el rol del usuario:", error);
+          setIsAdmin(false); // Deniega el acceso
+          setCurrentUser(null); // Limpia el usuario
           showAlert('Error al verificar permisos. Por favor, intenta iniciar sesión de nuevo.', 'error');
-          await signOut(auth); // Log out on error
+          await signOut(auth); // Cierra la sesión en caso de error
+          console.log("App.jsx: Sesión cerrada debido a error en verificación de rol.");
         }
 
-        // If a custom token is provided (from Canvas environment), sign in with it
+        // Si se proporciona un token inicial (del Canvas), inicia sesión con él
+        // Esta parte es específica del entorno Canvas y no debería interferir con el flujo de admin/no-admin
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           try {
             await signInWithCustomToken(auth, __initial_auth_token);
-            console.log("Sesión iniciada con token personalizado.");
+            console.log("App.jsx: Sesión iniciada con token personalizado (posiblemente para Canvas).");
           } catch (error) {
-            console.error("Error al iniciar sesión con token personalizado:", error);
+            console.error("App.jsx: Error al iniciar sesión con token personalizado:", error);
             showAlert(`Error al iniciar sesión con token personalizado: ${error.message}`);
           }
         }
       } else {
-        // No user logged in, reset admin status
+        // No hay usuario logueado, reinicia el estado de administrador
+        console.log("App.jsx: No hay usuario logueado.");
         setIsAdmin(false);
-        setCurrentPage('dashboard'); // Default to dashboard (which will show login)
+        setCurrentUser(null); // Asegura que currentUser sea null
+        setCurrentPage('dashboard'); // Por defecto al dashboard (que mostrará el login)
       }
       setLoadingAuth(false);
+      console.log(`App.jsx: Fin de onAuthStateChanged. currentUser: ${currentUser ? currentUser.email : 'null'}, isAdmin: ${isAdmin}`);
     });
 
     return () => unsubscribe();
-  }, [auth, db, showAlert]); // Add db to dependencies as it's used inside
+  }, [auth, db, showAlert, isAdmin]); // Agrega isAdmin a las dependencias para que el log final sea más preciso
 
   const handleLogout = async () => {
     if (auth) {
@@ -820,20 +832,23 @@ export default function App() {
     );
   }
 
-  // CRITICAL: Conditional rendering for Admin Panel Access
-  // Only render the admin panel if a user is logged in AND they are an admin
+  // CRÍTICO: Renderizado condicional para el Acceso al Panel de Administración
+  // Solo renderiza el panel de administración si hay un usuario logueado Y es un administrador.
+  // Si no se cumplen estas condiciones, se muestra el componente de Login.
   if (!currentUser || !isAdmin) {
+    console.log("App.jsx: Mostrando Login. currentUser:", currentUser ? currentUser.email : "null", "isAdmin:", isAdmin);
     return (
-      <AppContext.Provider value={{ db, auth, storage, currentUser, showAlert }}> {/* Pass showAlert */}
+      <AppContext.Provider value={{ db, auth, storage, currentUser, showAlert }}> {/* Pasa showAlert */}
         <Login />
         <CustomModal {...modalState} />
       </AppContext.Provider>
     );
   }
 
-  // Main Dashboard Layout (only rendered for authenticated admins)
+  // Diseño principal del Dashboard (solo se renderiza para administradores autenticados)
+  console.log("App.jsx: Mostrando Panel de Administrador. currentUser:", currentUser.email, "isAdmin:", isAdmin);
   return (
-    <AppContext.Provider value={{ db, auth, storage, currentUser, showAlert }}> {/* Pass showAlert */}
+    <AppContext.Provider value={{ db, auth, storage, currentUser, showAlert }}> {/* Pasa showAlert */}
       <div className="flex flex-col min-h-screen bg-gray-100 font-inter">
         {/* Navbar */}
         <nav className="bg-blue-700 p-4 text-white shadow-lg">
