@@ -703,6 +703,9 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard', 'products', 'orders', 'login'
   const { modalState, showAlert } = useModal(); // Get showAlert from App's useModal hook
 
+  // NUEVO ESTADO: Para controlar si la alerta de inicio de sesión de administrador ya se mostró
+  const [hasShownAdminLoginAlert, setHasShownAdminLoginAlert] = useState(false);
+
   // Initialize Firebase
   useEffect(() => {
     try {
@@ -746,7 +749,7 @@ export default function App() {
       console.log("App.jsx: onAuthStateChanged - Usuario actual:", user ? user.email : "Ninguno");
 
       if (user) {
-        // If a user is logged in, verify their role from Firestore
+        // Si un usuario está logueado, verifica su rol desde Firestore
         try {
           console.log(`App.jsx: Verificando rol para UID: ${user.uid}`);
           const userDocRef = doc(db, 'users', user.uid);
@@ -755,7 +758,11 @@ export default function App() {
           if (userDoc.exists() && userDoc.data().role === 'admin') {
             console.log("App.jsx: Usuario es administrador.");
             setIsAdmin(true);
-            showAlert(`¡Inicio de sesión exitoso como Administrador!`);
+            // Mostrar alerta SOLO si no se ha mostrado ya para esta sesión
+            if (!hasShownAdminLoginAlert) {
+              showAlert(`¡Inicio de sesión exitoso como Administrador!`);
+              setHasShownAdminLoginAlert(true); // Marcar como mostrada
+            }
           } else {
             // Usuario NO es administrador
             console.log("App.jsx: Usuario NO es administrador o rol no definido. Documento existe:", userDoc.exists(), "Rol:", userDoc.data()?.role);
@@ -764,6 +771,7 @@ export default function App() {
             showAlert('Acceso denegado: No tienes permisos de administrador.', 'error');
             await signOut(auth); // Cierra la sesión del usuario no-admin
             console.log("App.jsx: Sesión de usuario no-admin cerrada.");
+            setHasShownAdminLoginAlert(false); // Reinicia la bandera si el acceso es denegado
           }
         } catch (error) {
           console.error("App.jsx: Error al obtener el rol del usuario:", error);
@@ -772,6 +780,7 @@ export default function App() {
           showAlert('Error al verificar permisos. Por favor, intenta iniciar sesión de nuevo.', 'error');
           await signOut(auth); // Cierra la sesión en caso de error
           console.log("App.jsx: Sesión cerrada debido a error en verificación de rol.");
+          setHasShownAdminLoginAlert(false); // Reinicia la bandera en caso de error
         }
 
         // Si se proporciona un token inicial (del Canvas), inicia sesión con él
@@ -791,13 +800,14 @@ export default function App() {
         setIsAdmin(false);
         setCurrentUser(null); // Asegura que currentUser sea null
         setCurrentPage('dashboard'); // Por defecto al dashboard (que mostrará el login)
+        setHasShownAdminLoginAlert(false); // Reinicia la bandera al cerrar sesión
       }
       setLoadingAuth(false);
       console.log(`App.jsx: Fin de onAuthStateChanged. currentUser: ${currentUser ? currentUser.email : 'null'}, isAdmin: ${isAdmin}`);
     });
 
     return () => unsubscribe();
-  }, [auth, db, showAlert, isAdmin]); // Agrega isAdmin a las dependencias para que el log final sea más preciso
+  }, [auth, db, showAlert, isAdmin, hasShownAdminLoginAlert]); // Agrega hasShownAdminLoginAlert a las dependencias
 
   const handleLogout = async () => {
     if (auth) {
@@ -805,6 +815,7 @@ export default function App() {
         await signOut(auth);
         showAlert('¡Sesión cerrada con éxito!');
         setCurrentPage('dashboard'); // Redirigir a la página de login (que será el dashboard sin acceso)
+        setHasShownAdminLoginAlert(false); // Reinicia la bandera al cerrar sesión explícitamente
       } catch (error) {
         console.error('Error al cerrar sesión:', error);
         showAlert(`Error al cerrar sesión: ${error.message}`);
