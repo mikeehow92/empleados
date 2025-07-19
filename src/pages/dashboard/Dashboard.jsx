@@ -23,16 +23,20 @@ const Dashboard = () => {
         const productsQuery = collection(db, 'productos');
         const productsUnsubscribe = onSnapshot(productsQuery, (snapshot) => {
           const productsData = snapshot.docs.map(doc => doc.data());
-          const lowStock = productsData.filter(p => p.cantidadInventario < 10).length;
+          const lowStock = productsData.filter(p => p.cantidadInventario < 10).length; // Umbral de 10 para stock bajo
           setSummary(prev => ({
             ...prev,
             totalProducts: productsData.length,
             lowStockProducts: lowStock,
           }));
+        }, (err) => {
+          console.error("Error fetching products for dashboard:", err);
+          setError("Error al cargar datos de productos.");
         });
 
         // Órdenes
-        const ordersQuery = collection(db, 'ordenes');
+        // CAMBIO CLAVE: Cambiado 'ordenes' a 'orders' para que coincida con las reglas de seguridad
+        const ordersQuery = collection(db, 'orders');
         const ordersUnsubscribe = onSnapshot(ordersQuery, (snapshot) => {
           const ordersData = snapshot.docs.map(doc => doc.data());
           const pending = ordersData.filter(o => o.estado === 'pendiente' || o.estado === 'procesando').length;
@@ -41,6 +45,9 @@ const Dashboard = () => {
             totalOrders: ordersData.length,
             pendingOrders: pending,
           }));
+        }, (err) => {
+          console.error("Error fetching orders for dashboard:", err);
+          setError("Error al cargar datos de órdenes.");
         });
 
         setLoading(false);
@@ -50,7 +57,7 @@ const Dashboard = () => {
           ordersUnsubscribe();
         };
       } catch (err) {
-        console.error("Error al obtener el resumen del dashboard:", err);
+        console.error("Error general al obtener el resumen del dashboard:", err);
         setError("Error al cargar el resumen del dashboard.");
         setLoading(false);
       }
