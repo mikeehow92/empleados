@@ -1,12 +1,11 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app'; // Importa getApps y getApp
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, limit, getDoc } from 'firebase/firestore'; // Added getDoc
+import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, limit, getDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // Importa solo la configuración de Firebase
 import { firebaseConfig as localFirebaseConfig } from './firebase/firebaseConfig';
-
 
 // Contexto para el estado de autenticación y la base de datos
 const AppContext = createContext(null);
@@ -122,6 +121,7 @@ const Login = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete="current-password" // Agregado para accesibilidad
             />
           </div>
           <button
@@ -173,7 +173,7 @@ const Dashboard = () => {
         });
 
         // Órdenes
-        const ordersQuery = collection(db, 'ordenes');
+        const ordersQuery = collection(db, 'orders'); // Colección 'orders' para coincidir con reglas
         const ordersUnsubscribe = onSnapshot(ordersQuery, (snapshot) => {
           const ordersData = snapshot.docs.map(doc => doc.data());
           const pending = ordersData.filter(o => o.estado === 'pendiente' || o.estado === 'procesando').length;
@@ -552,7 +552,8 @@ const Orders = () => {
     }
 
     console.log("Orders.jsx: Intentando obtener órdenes de Firestore...");
-    const q = query(collection(db, 'ordenes'), orderBy('fechaOrden', 'desc'));
+    // Colección 'orders' para coincidir con las reglas de seguridad
+    const q = query(collection(db, 'orders'), orderBy('fechaOrden', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const ordersData = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -595,7 +596,7 @@ const Orders = () => {
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     setLoading(true);
     try {
-      const orderRef = doc(db, 'ordenes', orderId);
+      const orderRef = doc(db, 'orders', orderId); // Colección 'orders'
       await updateDoc(orderRef, { estado: newStatus });
       showAlert('Estado de la orden actualizado con éxito.');
     } catch (err) {
@@ -693,21 +694,18 @@ const Orders = () => {
 
 // Componente principal de la aplicación
 export default function App() {
-  const [firebaseApp, setFirebaseApp] = useState(null);
-  const [db, setDb] = useState(null);
-  const [auth, setAuth] = useState(null);
-  const [storage, setStorage] = useState(null);
+  // Los estados de firebaseApp, db, auth, storage ahora se inicializan una sola vez fuera del componente
+  // y se acceden directamente o se pasan a través del contexto.
+  const { modalState, showAlert } = useModal();
   const [currentUser, setCurrentUser] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false); // NEW: State to track admin status
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard', 'products', 'orders', 'login'
-  const { modalState, showAlert } = useModal(); // Get showAlert from App's useModal hook
-
-  // NUEVO ESTADO: Para controlar si la alerta de inicio de sesión de administrador ya se mostró
+  const [currentPage, setCurrentPage] = useState('dashboard');
   const [hasShownAdminLoginAlert, setHasShownAdminLoginAlert] = useState(false);
 
-  // Initialize Firebase
-  useEffect(() => {
+  // Mueve la inicialización de Firebase fuera del componente para que ocurra solo una vez
+  // al cargar el módulo.
+  const firebaseInitResult = React.useMemo(() => {
     try {
       console.log("App.jsx: Iniciando inicialización de Firebase...");
       console.log("App.jsx: Valor de __app_id (global):", typeof __app_id !== 'undefined' ? __app_id : 'NO DEFINIDO');
@@ -715,6 +713,7 @@ export default function App() {
       console.log("App.jsx: Valor de localFirebaseConfig (importado):", localFirebaseConfig);
 
       let finalFirebaseConfig = {};
+      // Prioriza la configuración global si está disponible y no está vacía
       if (typeof __firebase_config !== 'undefined' && __firebase_config && Object.keys(JSON.parse(__firebase_config)).length > 0) {
         finalFirebaseConfig = JSON.parse(__firebase_config);
         console.log("App.jsx: Usando configuración de Firebase de __firebase_config (global).");
@@ -727,29 +726,38 @@ export default function App() {
 
       console.log("App.jsx: Configuración de Firebase final a usar:", finalFirebaseConfig);
 
-      const app = initializeApp(finalFirebaseConfig);
-      setFirebaseApp(app);
-      setDb(getFirestore(app)); // Obtener la instancia de Firestore de la aplicación inicializada
-      setAuth(getAuth(app));     // Obtener la instancia de Auth de la aplicación inicializada
-      setStorage(getStorage(app)); // Obtener la instancia de Storage de la aplicación inicializada
+      // Verifica si ya hay una app de Firebase inicializada
+      const app = getApps().length === 0 ? initializeApp(finalFirebaseConfig) : getApp();
+      const authInstance = getAuth(app);
+      const dbInstance = getFirestore(app);
+      const storageInstance = getStorage(app);
       console.log("App.jsx: Firebase inicializado con éxito.");
+      return { app, auth: authInstance, db: dbInstance, storage: storageInstance, error: null };
     } catch (e) {
       console.error("App.jsx: Error al inicializar Firebase:", e);
-      showAlert(`Error al inicializar Firebase: ${e.message}. Asegúrate de que la configuración sea correcta.`);
-      setLoadingAuth(false);
+      // No se puede usar showAlert aquí directamente porque el hook useModal
+      // no está disponible en este ámbito (fuera del componente).
+      // Se manejará el error en el renderizado condicional del componente App.
+      return { app: null, auth: null, db: null, storage: null, error: e.message };
     }
-  }, [showAlert]);
+  }, []); // El array de dependencias vacío asegura que esto se ejecute solo una vez
+
+  // Extrae las instancias de Firebase del resultado de useMemo
+  const { app: firebaseApp, auth, db, storage, error: firebaseInitError } = firebaseInitResult;
 
   // Handle authentication state changes and role verification
   useEffect(() => {
-    if (!auth || !db) return; // Ensure auth and db are initialized
+    // Solo procede si auth y db están inicializados y no hay errores de inicialización
+    if (!auth || !db || firebaseInitError) {
+      setLoadingAuth(false);
+      return;
+    }
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user); // Set current user from auth state
+      setCurrentUser(user);
       console.log("App.jsx: onAuthStateChanged - Usuario actual:", user ? user.email : "Ninguno");
 
       if (user) {
-        // Si un usuario está logueado, verifica su rol desde Firestore
         try {
           console.log(`App.jsx: Verificando rol para UID: ${user.uid}`);
           const userDocRef = doc(db, 'users', user.uid);
@@ -758,64 +766,63 @@ export default function App() {
           if (userDoc.exists() && userDoc.data().role === 'admin') {
             console.log("App.jsx: Usuario es administrador.");
             setIsAdmin(true);
-            // Mostrar alerta SOLO si no se ha mostrado ya para esta sesión
             if (!hasShownAdminLoginAlert) {
               showAlert(`¡Inicio de sesión exitoso como Administrador!`);
-              setHasShownAdminLoginAlert(true); // Marcar como mostrada
+              setHasShownAdminLoginAlert(true);
             }
           } else {
-            // Usuario NO es administrador
             console.log("App.jsx: Usuario NO es administrador o rol no definido. Documento existe:", userDoc.exists(), "Rol:", userDoc.data()?.role);
-            setIsAdmin(false); // Establece isAdmin a false
-            setCurrentUser(null); // Fuerza la actualización de la UI a null
+            setIsAdmin(false);
+            setCurrentUser(null); // Limpia el usuario para forzar el login
             showAlert('Acceso denegado: No tienes permisos de administrador.', 'error');
-            await signOut(auth); // Cierra la sesión del usuario no-admin
+            await signOut(auth);
             console.log("App.jsx: Sesión de usuario no-admin cerrada.");
-            setHasShownAdminLoginAlert(false); // Reinicia la bandera si el acceso es denegado
+            setHasShownAdminLoginAlert(false);
           }
         } catch (error) {
           console.error("App.jsx: Error al obtener el rol del usuario:", error);
-          setIsAdmin(false); // Deniega el acceso
-          setCurrentUser(null); // Limpia el usuario
+          setIsAdmin(false);
+          setCurrentUser(null);
           showAlert('Error al verificar permisos. Por favor, intenta iniciar sesión de nuevo.', 'error');
-          await signOut(auth); // Cierra la sesión en caso de error
+          await signOut(auth);
           console.log("App.jsx: Sesión cerrada debido a error en verificación de rol.");
-          setHasShownAdminLoginAlert(false); // Reinicia la bandera en caso de error
+          setHasShownAdminLoginAlert(false);
         }
 
         // Si se proporciona un token inicial (del Canvas), inicia sesión con él
-        // Esta parte es específica del entorno Canvas y no debería interferir con el flujo de admin/no-admin
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           try {
-            await signInWithCustomToken(auth, __initial_auth_token);
-            console.log("App.jsx: Sesión iniciada con token personalizado (posiblemente para Canvas).");
+            // Solo intenta signInWithCustomToken si no es el mismo usuario ya logueado
+            if (!user || user.uid !== auth.currentUser?.uid) {
+              await signInWithCustomToken(auth, __initial_auth_token);
+              console.log("App.jsx: Sesión iniciada con token personalizado (posiblemente para Canvas).");
+            }
           } catch (error) {
             console.error("App.jsx: Error al iniciar sesión con token personalizado:", error);
             showAlert(`Error al iniciar sesión con token personalizado: ${error.message}`);
           }
         }
       } else {
-        // No hay usuario logueado, reinicia el estado de administrador
         console.log("App.jsx: No hay usuario logueado.");
         setIsAdmin(false);
-        setCurrentUser(null); // Asegura que currentUser sea null
+        setCurrentUser(null);
         setCurrentPage('dashboard'); // Por defecto al dashboard (que mostrará el login)
-        setHasShownAdminLoginAlert(false); // Reinicia la bandera al cerrar sesión
+        setHasShownAdminLoginAlert(false);
       }
       setLoadingAuth(false);
-      console.log(`App.jsx: Fin de onAuthStateChanged. currentUser: ${currentUser ? currentUser.email : 'null'}, isAdmin: ${isAdmin}`);
+      console.log(`App.jsx: Fin de onAuthStateChanged. currentUser: ${user ? user.email : 'null'}, isAdmin: ${isAdmin}`);
     });
 
     return () => unsubscribe();
-  }, [auth, db, showAlert, isAdmin, hasShownAdminLoginAlert]); // Agrega hasShownAdminLoginAlert a las dependencias
+  }, [auth, db, showAlert, hasShownAdminLoginAlert]); // Dependencias: auth, db, showAlert, hasShownAdminLoginAlert
 
   const handleLogout = async () => {
     if (auth) {
       try {
         await signOut(auth);
         showAlert('¡Sesión cerrada con éxito!');
-        setCurrentPage('dashboard'); // Redirigir a la página de login (que será el dashboard sin acceso)
-        setHasShownAdminLoginAlert(false); // Reinicia la bandera al cerrar sesión explícitamente
+        setCurrentPage('dashboard');
+        setHasShownAdminLoginAlert(false);
       } catch (error) {
         console.error('Error al cerrar sesión:', error);
         showAlert(`Error al cerrar sesión: ${error.message}`);
@@ -831,12 +838,24 @@ export default function App() {
     );
   }
 
-  // If Firebase is not initialized or authentication failed, show an error or the login page
+  // Si hay un error de inicialización de Firebase, mostrarlo
+  if (firebaseInitError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-red-100 text-red-800 p-4">
+        <p className="text-lg text-center">
+          Error: No se pudo inicializar Firebase. {firebaseInitError}. Por favor, verifica la configuración.
+        </p>
+        <CustomModal {...modalState} />
+      </div>
+    );
+  }
+
+  // Si Firebase no está completamente inicializado (aunque el error ya se maneja arriba)
   if (!firebaseApp || !db || !auth || !storage) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-red-100 text-red-800 p-4">
         <p className="text-lg text-center">
-          Error: No se pudo inicializar Firebase. Por favor, verifica la configuración.
+          Error: Componentes de Firebase no disponibles.
         </p>
         <CustomModal {...modalState} />
       </div>
@@ -849,7 +868,7 @@ export default function App() {
   if (!currentUser || !isAdmin) {
     console.log("App.jsx: Mostrando Login. currentUser:", currentUser ? currentUser.email : "null", "isAdmin:", isAdmin);
     return (
-      <AppContext.Provider value={{ db, auth, storage, currentUser, showAlert }}> {/* Pasa showAlert */}
+      <AppContext.Provider value={{ db, auth, storage, currentUser, showAlert }}>
         <Login />
         <CustomModal {...modalState} />
       </AppContext.Provider>
@@ -859,7 +878,7 @@ export default function App() {
   // Diseño principal del Dashboard (solo se renderiza para administradores autenticados)
   console.log("App.jsx: Mostrando Panel de Administrador. currentUser:", currentUser.email, "isAdmin:", isAdmin);
   return (
-    <AppContext.Provider value={{ db, auth, storage, currentUser, showAlert }}> {/* Pasa showAlert */}
+    <AppContext.Provider value={{ db, auth, storage, currentUser, showAlert }}>
       <div className="flex flex-col min-h-screen bg-gray-100 font-inter">
         {/* Navbar */}
         <nav className="bg-blue-700 p-4 text-white shadow-lg">
