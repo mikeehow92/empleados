@@ -630,13 +630,15 @@ const Orders = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Productos</th>
+                  {/* NUEVOS ENCABEZADOS DE COLUMNA */}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dirección de Envío</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {orders.map((order) => (
                   <tr key={order.id}>
-                    {/* CAMBIO 1: Mostrar el ID de la orden completo */}
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.id}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {order.fechaOrden && typeof order.fechaOrden.toDate === 'function'
@@ -658,11 +660,17 @@ const Orders = () => {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       <ul className="list-disc list-inside">
-                        {/* CAMBIO 2: Usar order.items y las propiedades name y quantity */}
                         {order.items && order.items.map((item, index) => (
                           <li key={index}>{item.name} (x{item.quantity})</li>
                         ))}
                       </ul>
+                    </td>
+                    {/* NUEVAS CELDAS DE DATOS */}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {order.shippingDetails?.fullName || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {order.shippingDetails?.address || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <select
