@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { collection, onSnapshot, doc, updateDoc, query, orderBy } from 'firebase/firestore';
-import { AppContext } from '../../contexts/AppContext.jsx';
+import { AppContext } from '../../contexts/AppContext.jsx'; // RUTA CORREGIDA
 import { useModal } from '../../hooks/useModal.js';
 
 // Componente de Gestión de Órdenes
@@ -23,23 +23,26 @@ const Orders = () => {
     }
 
     console.log("Orders.jsx: Intentando obtener órdenes de Firestore...");
+    // Colección 'orders' para coincidir con las reglas de seguridad
     const q = query(collection(db, 'orders'), orderBy('fechaOrden', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const ordersData = snapshot.docs.map(doc => {
         const data = doc.data();
         let estado = data.estado;
 
+        // Si estado es un objeto, intenta encontrar una cadena de estado válida
         if (typeof estado === 'object' && estado !== null) {
           console.warn(`Orders.jsx: 'estado' para la orden ${doc.id} es un objeto. Intentando analizar o establecer un valor predeterminado.`);
           const foundStatusKey = orderStatuses.find(statusKey => Object.keys(estado).includes(statusKey));
           if (foundStatusKey) {
-            estado = foundStatusKey;
+            estado = foundStatusKey; // Usa la primera clave de estado válida encontrada
             console.log(`Orders.jsx: 'estado' analizado de objeto a cadena: ${estado}`);
           } else {
-            estado = 'desconocido';
+            estado = 'desconocido'; // Valor predeterminado si no se encuentra una clave de estado válida
             console.warn(`Orders.jsx: No se encontró una clave de estado válida en el objeto para la orden ${doc.id}. Se establece 'desconocido'.`);
           }
         } else if (typeof estado !== 'string') {
+          // Si no es una cadena y no es un objeto, establece un valor predeterminado.
           console.warn(`Orders.jsx: 'estado' para la orden ${doc.id} no es una cadena ni un objeto. Tipo: ${typeof estado}. Se establece 'desconocido'.`);
           estado = 'desconocido';
         }
@@ -63,10 +66,12 @@ const Orders = () => {
 
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     setLoading(true);
+    console.log(`Intentando actualizar la orden ${orderId} a estado: ${newStatus}`); // Log para depuración
     try {
       const orderRef = doc(db, 'orders', orderId);
       await updateDoc(orderRef, { estado: newStatus });
       showAlert('Estado de la orden actualizado con éxito.');
+      console.log(`Orden ${orderId} actualizada a estado: ${newStatus}`); // Log de éxito
     } catch (err) {
       console.error('Error actualizando estado de la orden:', err);
       showAlert(`Error al actualizar estado: ${err.message}`);
@@ -102,7 +107,8 @@ const Orders = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {orders.map((order) => (
                   <tr key={order.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.id.substring(0, 8)}...</td>
+                    {/* CAMBIO 1: Mostrar el ID de la orden completo */}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.id}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {order.fechaOrden && typeof order.fechaOrden.toDate === 'function'
                         ? order.fechaOrden.toDate().toLocaleDateString()
@@ -123,7 +129,7 @@ const Orders = () => {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       <ul className="list-disc list-inside">
-                        {/* CAMBIO CLAVE AQUÍ: Usar order.items y las propiedades name y quantity */}
+                        {/* CAMBIO 2: Usar order.items y las propiedades name y quantity */}
                         {order.items && order.items.map((item, index) => (
                           <li key={index}>{item.name} (x{item.quantity})</li>
                         ))}
