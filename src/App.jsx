@@ -532,7 +532,7 @@ const Products = () => {
   );
 };
 
-// Componente de Gestión de Órdenes
+// Componente de Gestión de Órdenes (AHORA CON LAS CORRECCIONES)
 const Orders = () => {
   const { db } = useContext(AppContext);
   const { showAlert, showConfirm, closeModal, modalState } = useModal();
@@ -595,10 +595,12 @@ const Orders = () => {
 
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     setLoading(true);
+    console.log(`Intentando actualizar la orden ${orderId} a estado: ${newStatus}`); // Log para depuración
     try {
       const orderRef = doc(db, 'orders', orderId); // Colección 'orders'
       await updateDoc(orderRef, { estado: newStatus });
       showAlert('Estado de la orden actualizado con éxito.');
+      console.log(`Orden ${orderId} actualizada a estado: ${newStatus}`); // Log de éxito
     } catch (err) {
       console.error('Error actualizando estado de la orden:', err);
       showAlert(`Error al actualizar estado: ${err.message}`);
@@ -634,43 +636,37 @@ const Orders = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {orders.map((order) => (
                   <tr key={order.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.id.substring(0, 8)}...</td>
+                    {/* CAMBIO 1: Mostrar el ID de la orden completo */}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.id}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {/* Debugging: Log the raw fechaOrden and its type */}
-                      {console.log(`Order ID: ${order.id}, Fecha Orden (raw): ${order.fechaOrden}, Typeof Fecha Orden: ${typeof order.fechaOrden}`)}
-                      {/* Check if fechaOrden is a Firestore Timestamp before calling toDate() */}
                       {order.fechaOrden && typeof order.fechaOrden.toDate === 'function'
                         ? order.fechaOrden.toDate().toLocaleDateString()
                         : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {/* Debugging: Log the raw total and its type */}
-                      {console.log(`Order ID: ${order.id}, Total (raw): ${order.total}, Typeof Total: ${typeof order.total}`)}
-                      {/* Ensure total is a number before calling toFixed */}
                       {typeof order.total === 'number' && !isNaN(order.total)
                         ? `$${order.total.toFixed(2)}`
                         : '0.00'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {/* Debugging: Log the raw estado and its type at render time */}
-                      {console.log(`Order ID: ${order.id}, Estado (raw at render): ${order.estado}, Typeof Estado: ${typeof order.estado}`)}
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
                         ${order.estado === 'entregado' ? 'bg-green-100 text-green-800' :
                            order.estado === 'cancelado' ? 'bg-red-100 text-red-800' :
                            'bg-yellow-100 text-yellow-800'}`}>
-                        {typeof order.estado === 'string' ? order.estado : 'Estado Inválido'} {/* Defensive rendering */}
+                        {typeof order.estado === 'string' ? order.estado : 'Estado Inválido'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       <ul className="list-disc list-inside">
-                        {order.productosOrdenados && order.productosOrdenados.map((item, index) => (
-                          <li key={index}>{item.nombreProducto} (x{item.cantidad})</li>
+                        {/* CAMBIO 2: Usar order.items y las propiedades name y quantity */}
+                        {order.items && order.items.map((item, index) => (
+                          <li key={index}>{item.name} (x{item.quantity})</li>
                         ))}
                       </ul>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <select
-                        value={typeof order.estado === 'string' ? order.estado : ''} // Default to empty string if not a string
+                        value={typeof order.estado === 'string' ? order.estado : ''}
                         onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
                         className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm"
                       >
