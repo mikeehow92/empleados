@@ -575,9 +575,10 @@ const Orders = () => {
             return;
         }
 
+        // Verificación crítica: Asegurarse de que el userId existe
         if (!userId) {
-             console.error("userId no está disponible para actualizar la subcolección.");
-             showAlert("Error: ID de usuario no disponible para la orden.");
+             console.error("Error: userId no está disponible para la orden:", orderId);
+             showAlert("Error: El ID de usuario no está disponible para esta orden. No se puede actualizar la subcolección.");
              return;
         }
         
