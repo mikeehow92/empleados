@@ -147,14 +147,15 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+  const { userId } = useContext(AppContext);
 
   useEffect(() => {
-    if (!db) return;
+    if (!db || !userId) return;
 
     const fetchSummary = async () => {
       try {
         // Productos
-        const productsQuery = collection(db, `artifacts/${appId}/public/data/productos`);
+        const productsQuery = collection(db, `artifacts/${appId}/users/${userId}/products`);
         const productsUnsubscribe = onSnapshot(productsQuery, (snapshot) => {
           const productsData = snapshot.docs.map(doc => doc.data());
           const lowStock = productsData.filter(p => p.cantidadInventario < 10).length; // Umbral de 10 para stock bajo
@@ -197,7 +198,7 @@ const Dashboard = () => {
     };
 
     fetchSummary();
-  }, [db, appId]);
+  }, [db, appId, userId]);
 
   if (loading) return <div className="text-center p-8">Cargando resumen...</div>;
   if (error) return <div className="text-center p-8 text-red-600">Error: {error}</div>;
@@ -721,6 +722,7 @@ const AuthGate = ({ children }) => {
 const App = () => {
   const [db, setDb] = useState(null);
   const [auth, setAuth] = useState(null);
+  const [storage, setStorage] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [userId, setUserId] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -729,7 +731,7 @@ const App = () => {
   const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
   useEffect(() => {
-    let app, authInstance, dbInstance;
+    let app, authInstance, dbInstance, storageInstance;
     try {
         const apps = getApps();
         if (apps && apps.length > 0) {
@@ -740,9 +742,11 @@ const App = () => {
         }
         authInstance = getAuth(app);
         dbInstance = getFirestore(app);
+        storageInstance = getStorage(app);
         
         setAuth(authInstance);
         setDb(dbInstance);
+        setStorage(storageInstance);
 
     } catch (error) {
         console.error("Error initializing Firebase:", error);
@@ -785,6 +789,7 @@ const App = () => {
   const appContextValue = {
     db,
     auth,
+    storage,
     isAuthReady,
     userId,
     isAdmin,
