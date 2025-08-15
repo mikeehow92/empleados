@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { collection, onSnapshot, doc, updateDoc, query, orderBy } from 'firebase/firestore';
-import { AppContext } from './AppContext.jsx'; // Ruta corregida
-import { useModal } from './hooks/useModal.js'; // Ruta corregida
-import CustomModal from './components/CustomModal.jsx'; // Ruta corregida
+import { AppContext } from '../../contexts/AppContext.jsx'; // Se corrige la ruta
+import { useModal } from '../../hooks/useModal.js'; // Se corrige la ruta
+import CustomModal from '../components/CustomModal.jsx'; // Se corrige la ruta
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // Componente de Gestión de Órdenes
