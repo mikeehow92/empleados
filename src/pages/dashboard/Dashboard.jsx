@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { AppContext } from '../../contexts/AppContext.jsx'; // RUTA CORREGIDA
+import { AppContext } from './AppContext.jsx';
 
 // Componente de Dashboard (Vista General)
 const Dashboard = () => {
@@ -35,11 +35,10 @@ const Dashboard = () => {
         });
 
         // Órdenes
-        // CAMBIO CLAVE: Cambiado 'ordenes' a 'orders' para que coincida con las reglas de seguridad
         const ordersQuery = collection(db, 'orders');
         const ordersUnsubscribe = onSnapshot(ordersQuery, (snapshot) => {
           const ordersData = snapshot.docs.map(doc => doc.data());
-          const pending = ordersData.filter(o => o.estado === 'pendiente' || o.estado === 'procesando').length;
+          const pending = ordersData.filter(o => o.estado === 'pendiente').length;
           setSummary(prev => ({
             ...prev,
             totalOrders: ordersData.length,
@@ -56,9 +55,9 @@ const Dashboard = () => {
           productsUnsubscribe();
           ordersUnsubscribe();
         };
-      } catch (err) {
-        console.error("Error general al obtener el resumen del dashboard:", err);
-        setError("Error al cargar el resumen del dashboard.");
+      } catch (e) {
+        console.error("Error general en fetchSummary:", e);
+        setError("Error inesperado al cargar los datos.");
         setLoading(false);
       }
     };
@@ -66,8 +65,8 @@ const Dashboard = () => {
     fetchSummary();
   }, [db]);
 
-  if (loading) return <div className="text-center p-8">Cargando resumen...</div>;
-  if (error) return <div className="text-center p-8 text-red-600">Error: {error}</div>;
+  if (loading) return <div className="flex items-center justify-center min-h-screen">Cargando...</div>;
+  if (error) return <div className="text-red-500 text-center">Error: {error}</div>;
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -87,7 +86,7 @@ const Dashboard = () => {
         </div>
         <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col items-center justify-center text-center">
           <div className="text-5xl font-bold text-red-600 mb-2">{summary.lowStockProducts}</div>
-          <p className="text-lg text-gray-700">Productos con Poco Stock</p>
+          <p className="text-lg text-gray-700">Productos con poco Stock</p>
         </div>
       </div>
     </div>
