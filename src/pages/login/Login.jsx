@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { AppContext } from '../../contexts/AppContext.jsx'; // RUTA CORREGIDA
-import { useModal } from '../../hooks/useModal.js';
+import { AppContext } from './AppContext.jsx';
+import { useModal } from './hooks/useModal.js';
 
 // Componente de Inicio de Sesión
 const Login = () => {
